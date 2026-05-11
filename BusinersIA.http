@@ -1,0 +1,6 @@
+@BusinersIA_HostAddress = http://localhost:5124
+
+GET {{BusinersIA_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
