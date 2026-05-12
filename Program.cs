@@ -1,9 +1,12 @@
 using BusinersIA;
+using BusinersIA.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllers();
+builder.Services.AddHttpClient();
+builder.Services.AddSingleton<OllamaProcessingService>();
 
 // Habilitar CORS
 builder.Services.AddCors(options =>
@@ -29,6 +32,18 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
+
+// Middleware para verificar o Ollama em todos os requests
+app.Use(async (context, next) =>
+{
+    if (!SetupIA.IsOllamaInstalled())
+    {
+        context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+        await context.Response.WriteAsJsonAsync(new { erro = "O serviço está indisponível por falta do gerenciador de LLM (Ollama)." });
+        return;
+    }
+    await next();
+});
 
 // app.UseHttpsRedirection(); // Comentado para permitir requisições HTTP locais pelo cURL sem redirecionamento 307
 

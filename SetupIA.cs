@@ -15,14 +15,81 @@ namespace BusinersIA
             if (IsOllamaInstalled())
             {
                 Console.WriteLine("Ollama já está instalado e pronto para uso.");
-                return;
+            }
+            else
+            {
+                Console.WriteLine("Ollama não foi encontrado. Iniciando o processo de instalação...");
+                await InstallOllamaAsync();
             }
 
-            Console.WriteLine("Ollama não foi encontrado. Iniciando o processo de instalação...");
-            await InstallOllamaAsync();
+            await CheckAndPullModelAsync("qwen2.5-coder:7b");
         }
 
-        private static bool IsOllamaInstalled()
+        private static async Task CheckAndPullModelAsync(string modelName)
+        {
+            Console.WriteLine($"Verificando se o modelo '{modelName}' está instalado...");
+            
+            try
+            {
+                var checkProcessInfo = new ProcessStartInfo
+                {
+                    FileName = "ollama",
+                    Arguments = $"list",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                using var checkProcess = Process.Start(checkProcessInfo);
+                string output = await checkProcess.StandardOutput.ReadToEndAsync();
+                await checkProcess.WaitForExitAsync();
+
+                if (output.Contains(modelName))
+                {
+                    Console.WriteLine($"O modelo '{modelName}' já está instalado.");
+                    return;
+                }
+
+                Console.WriteLine($"O modelo '{modelName}' não foi encontrado. Baixando modelo (isso pode demorar dependendo da sua internet)...");
+                
+                var pullProcessInfo = new ProcessStartInfo
+                {
+                    FileName = "ollama",
+                    Arguments = $"pull {modelName}",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                using var pullProcess = new Process { StartInfo = pullProcessInfo };
+                
+                pullProcess.OutputDataReceived += (sender, e) => { if (!string.IsNullOrEmpty(e.Data)) Console.WriteLine(e.Data); };
+                pullProcess.ErrorDataReceived += (sender, e) => { if (!string.IsNullOrEmpty(e.Data)) Console.WriteLine(e.Data); };
+                
+                pullProcess.Start();
+                pullProcess.BeginOutputReadLine();
+                pullProcess.BeginErrorReadLine();
+                
+                await pullProcess.WaitForExitAsync();
+
+                if (pullProcess.ExitCode == 0)
+                {
+                    Console.WriteLine($"Modelo '{modelName}' baixado com sucesso!");
+                }
+                else
+                {
+                    Console.WriteLine($"Falha ao baixar o modelo '{modelName}'. Código de saída: {pullProcess.ExitCode}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Erro ao verificar ou baixar o modelo '{modelName}': {ex.Message}");
+            }
+        }
+
+        public static bool IsOllamaInstalled()
         {
             try
             {
@@ -51,59 +118,39 @@ namespace BusinersIA
         {
             try
             {
-                string installerUrl = "https://ollama.com/download/OllamaSetup.exe";
-                string tempInstallerPath = Path.Combine(Path.GetTempPath(), "OllamaSetup.exe");
+                Console.WriteLine("Baixando e instalando o Ollama via script bash...");
+                
+                string bashScript = "if ! command -v zstd > /dev/null; then echo 'Dependência zstd não encontrada. Tentando instalar...'; if command -v apt-get > /dev/null; then sudo apt-get update && sudo apt-get install -y zstd; elif command -v dnf > /dev/null; then sudo dnf install -y zstd; elif command -v pacman > /dev/null; then sudo pacman -S --noconfirm zstd; fi; fi; curl -fsSL https://ollama.com/install.sh | sh";
 
-                using (var httpClient = new HttpClient())
-                {
-                    Console.WriteLine("Baixando o instalador do Ollama...");
-                    var response = await httpClient.GetAsync(installerUrl, HttpCompletionOption.ResponseHeadersRead);
-                    response.EnsureSuccessStatusCode();
-
-                    long? totalBytes = response.Content.Headers.ContentLength;
-
-                    using var contentStream = await response.Content.ReadAsStreamAsync();
-                    using var fileStream = new FileStream(tempInstallerPath, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true);
-                    
-                    var buffer = new byte[8192];
-                    bool isMoreToRead = true;
-                    long totalRead = 0;
-
-                    while (isMoreToRead)
-                    {
-                        int read = await contentStream.ReadAsync(buffer, 0, buffer.Length);
-                        if (read == 0)
-                        {
-                            isMoreToRead = false;
-                            Console.WriteLine();
-                            Console.WriteLine("Download concluído com sucesso.");
-                        }
-                        else
-                        {
-                            await fileStream.WriteAsync(buffer, 0, read);
-                            totalRead += read;
-                            if (totalBytes.HasValue)
-                            {
-                                int percentage = (int)((totalRead * 100) / totalBytes.Value);
-                                Console.Write($"\rProgresso do download: {percentage}%");
-                            }
-                        }
-                    }
-                }
-
-                Console.WriteLine("Executando o instalador do Ollama...");
                 var installProcessInfo = new ProcessStartInfo
                 {
-                    FileName = tempInstallerPath,
-                    // Tenta executar silenciosamente, caso o instalador suporte
-                    Arguments = "/S", 
-                    UseShellExecute = true
+                    FileName = "/bin/bash",
+                    Arguments = $"-c \"{bashScript}\"",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
                 };
 
-                using var installProcess = Process.Start(installProcessInfo);
-                installProcess?.WaitForExit();
+                using var installProcess = new Process { StartInfo = installProcessInfo };
+                
+                installProcess.OutputDataReceived += (sender, e) => { if (!string.IsNullOrEmpty(e.Data)) Console.WriteLine(e.Data); };
+                installProcess.ErrorDataReceived += (sender, e) => { if (!string.IsNullOrEmpty(e.Data)) Console.WriteLine($"Erro: {e.Data}"); };
+                
+                installProcess.Start();
+                installProcess.BeginOutputReadLine();
+                installProcess.BeginErrorReadLine();
+                
+                await installProcess.WaitForExitAsync();
 
-                Console.WriteLine("Processo de instalação do Ollama finalizado.");
+                if (installProcess.ExitCode == 0)
+                {
+                    Console.WriteLine("Processo de instalação do Ollama finalizado com sucesso.");
+                }
+                else
+                {
+                    Console.WriteLine($"A instalação do Ollama falhou com o código de saída: {installProcess.ExitCode}");
+                }
             }
             catch (Exception ex)
             {

@@ -16,6 +16,23 @@
                 "kind": "build",
                 "isDefault": true
             }
+        },
+        {
+            "label": "build-wsl",
+            "command": "wsl",
+            "type": "process",
+            "args": [
+                "dotnet",
+                "build",
+                "BusinersIA.csproj",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": "$msCompile",
+            "group": "build"
         }
     ]
 }
